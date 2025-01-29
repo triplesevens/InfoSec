@@ -1,0 +1,71 @@
+Objective
+The goal of this exercise was to:
+
+Identify all Sysmon EventCodes present in the dataset.
+
+Understand the significance of each EventCode in detecting malicious activity.
+
+Perform preliminary queries to spot anomalies, such as unusual parent-child process hierarchies.
+
+Step 1: Identifying Sysmon EventCodes
+To begin, I ran the following Splunk query to identify all Sysmon EventCodes in the dataset:
+
+spl
+Copy
+index="main" sourcetype="WinEventLog:Sysmon" | stats count by EventCode
+This query returned 20 distinct EventCodes. Here’s a breakdown of some key EventCodes and their relevance to threat hunting:
+
+Key Sysmon EventCodes and Their Significance
+EventCode	Description	Use Case in Threat Hunting
+1	Process Creation	Detect abnormal parent-child process hierarchies.
+2	A process changed a file creation time	Identify "time stomp" attacks (though not always malicious).
+3	Network connection	Monitor for unusual network activity (can be noisy).
+4	Sysmon service state changed	Detect attempts to stop or tamper with Sysmon.
+5	Process terminated	Identify suspicious process terminations (e.g., Cobalt Strike’s sacrificial processes).
+6	Driver loaded	Flag potential BYOD (Bring Your Own Driver) attacks.
+7	Image loaded	Detect DLL hijacks or suspicious DLL loads.
+8	CreateRemoteThread	Identify injected threads (can be legitimate or malicious).
+10	ProcessAccess	Spot remote code injection and memory dumping.
+11	FileCreate	Correlate file creation events with other activities.
+12/13	RegistryEvent (Object create/delete, Value Set)	Hunt for malicious registry modifications.
+15	FileCreateStreamHash	Monitor file streams and "Mark of the Web" for external downloads.
+16	Sysmon config state changed	Detect tampering with Sysmon configuration.
+17/18	Pipe created/connected	Observe malware’s interprocess communication or lateral movement (e.g., PsExec, SMB).
+22	DNSEvent	Track DNS queries for beaconing or DNS-based attacks.
+23	FileDelete	Monitor file deletions for signs of cleanup or ransomware activity.
+25	ProcessTampering (Process image change)	Detect behaviors like process herpaderping (acting as a mini AV alert filter).
+Step 2: Analyzing Parent-Child Process Hierarchies
+One of the most common indicators of malicious activity is unusual parent-child process relationships. For example, explorer.exe spawning cmd.exe might be normal, but cmd.exe spawning powershell.exe could be suspicious.
+
+To inspect all parent-child trees, I used the following Splunk query:
+
+spl
+Copy
+index="main" sourcetype="WinEventLog:Sysmon" EventCode=1
+| stats count by ParentImage, Image
+| sort - count
+This query lists all processes and their parent processes, sorted by frequency. By analyzing these relationships, I was able to identify potential anomalies, such as:
+
+Unusual processes spawning cmd.exe or powershell.exe.
+
+Processes with no clear parent or unexpected parents.
+
+Step 3: Challenges and Solutions
+While analyzing the data, I encountered a few challenges:
+
+Noisy Data: EventCodes like 3 (Network connection) and 11 (FileCreate) generated a lot of noise, making it difficult to spot anomalies.
+
+Solution: I focused on quieter EventCodes (e.g., 8 (CreateRemoteThread), 10 (ProcessAccess)) and used filters to reduce noise.
+
+False Positives: Some events, like 2 (File creation time changed), can be legitimate.
+
+Solution: I correlated these events with other activities to determine their legitimacy.
+
+Key Learnings
+This exercise taught me:
+
+The Power of Sysmon: Sysmon provides detailed visibility into system activities, making it a valuable tool for threat hunting.
+
+Importance of Context: Not all anomalies are malicious. Correlating events and understanding their context is crucial.
+
+Efficient Querying: Writing targeted Splunk queries helps reduce noise and focus on high-priority events.
